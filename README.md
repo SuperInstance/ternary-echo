@@ -1,62 +1,65 @@
 # ternary-echo
 
-**Delay lines, multi-tap echoes, and ping-pong effects for ternary audio.**
+**Space in a signal. Reflection, delay, and the sound of rooms that don't exist.**
 
-An echo is just a memory — the signal comes back, slightly delayed, slightly changed. In audio processing, delay lines are the foundation of reverb, chorus, flanging, and every spatial effect. This crate implements them for signals in `{-1, 0, +1}`.
+An echo is the simplest spatial effect: the sound goes out, hits a wall, comes back. The delay time tells you how far the wall is. The decay tells you what the wall is made of. A cathedral has long, slow decay. A bathroom has short, bright reflections. An open field has no echo at all.
 
-The ternary constraint makes echoes *sharp*. There's no gradual fade — a delayed ternary signal either changes state or it doesn't. This creates distinctive rhythmic patterns: the echo isn't a ghost of the original, it's the original arriving again, shifted in time.
+This crate implements echo, multi-tap delay, and feedback loops for ternary signals. Each echo is a delayed copy of the original signal, attenuated and added back. With feedback, the echoes echo — creating cascading reflections that eventually die out (or don't, if you push the feedback too high, and then it *screams*).
 
 ## What's Inside
 
-- **`DelayLine`** — circular buffer with `tick()` (process one sample), `tap()` (read from offset), and feedback control
-- **`multi_tap(signal, taps, capacity, feedback)`** — extract multiple delay taps from a single line. Create rhythmic patterns from one input
-- **`ping_pong(left, right, feedback, delay)`** — alternating stereo echoes. Left feeds right, right feeds left. The classic spatial widener
-- **`slapback(signal, delay, mix)`** — single-repeat echo. Rockabilly in a function
-- **`feedback_echo(signal, delay, feedback, mix)`** — repeating echo with decay. Each repeat is quieter until it vanishes
+- **`simple_echo(signal, delay, decay)`** — one echo at `delay` ticks with `decay` attenuation (0-1)
+- **`multi_tap(signal, taps)`** — multiple echoes at different delays and decays. The sound of a complex room
+- **`feedback_echo(signal, delay, decay, feedback)`** — echoes that echo. `feedback` controls how much of each echo feeds back into the next iteration
+- **`ping_pong(signal, delay, decay)`** — echoes that alternate between left and right channels. Stereo space from a mono signal
+- **`slapback(signal, delay)`** — a single, fast, loud echo. The rockabilly sound. Sun Studios, 1956
+- **`reverb_approx(signal, room_size)`** — many overlapping echoes at different delays. An approximation of room reverb using ternary feedback
 
 ## Quick Example
 
 ```rust
 use ternary_echo::*;
 
-// Simple delay line
-let mut dl = DelayLine::new(100); // 100-sample buffer
-let output = dl.tick(1, 0.7); // write 1, read with 70% feedback
-assert_eq!(output, 0); // first read is empty (buffer was zero)
+let signal = vec![1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
 
-// Process a signal with slapback echo
-let signal = vec![1, -1, 0, 1, -1, 0];
-let echoed = slapback(&signal, 3, 0.5);
-// Original signal + delayed copy mixed in
+// Simple echo: one repeat after 4 ticks, at 50% volume
+let echoed = simple_echo(&signal, 4, 0.5);
+// [1, 0, 0, 0, 0, 0, 0, 0, ...] + delayed copy at half amplitude
 
-// Multi-tap: three echoes at different delays
-let taps = multi_tap(&signal, &[50, 100, 150], 200, 0.6);
-// taps[0] = 50-sample delay, taps[1] = 100-sample, taps[2] = 150-sample
+// Slapback: fast echo at 75% volume (rockabilly!)
+let slap = slapback(&signal, 2);
 
-// Ping-pong stereo
-let left  = vec![1, 0, -1, 0, 1, 0];
-let right = vec![0, 1, 0, -1, 0, 1];
-let (echo_l, echo_r) = ping_pong(&left, &right, 0.5, 50);
+// Feedback echo: cascading reflections
+let cascading = feedback_echo(&signal, 3, 0.6, 0.5);
+// Echo → echo of echo → echo of echo of echo → ... fading out
+
+// Multi-tap: three different delay times
+let taps = vec![(2, 0.7), (5, 0.5), (8, 0.3)];
+let complex = multi_tap(&signal, &taps);
 ```
 
-## The Insight
+## The Deeper Truth
 
-**Ternary echoes preserve state boundaries.** In continuous audio, an echo is a smeared copy — amplitude decays, harmonics blur. In ternary, the echo arrives *exactly* as it was: -1, 0, or +1. The only transformation is time. This makes ternary delay effects especially useful for rhythm generation, pattern evolution, and any domain where you want echoes that *mean* something, not just sound like something.
+**Echo is the only way to hear space in a flat signal.** A ternary signal is a sequence of values — no space, no dimension, no room. But add a delayed copy and suddenly you can hear the walls. The delay time maps to distance (1ms ≈ 34cm). The decay maps to absorption (hard walls reflect more, soft walls absorb more). The feedback maps to how many bounces before the sound dies.
+
+In ternary, echo has a unique property: because the signal only has three values, the echoes can't gradually fade to a smooth silence. They fade in *steps* — from ±1 to 0. This creates a quantized decay that sounds distinctly different from analog echo. Each echo is either there (±1) or gone (0), with nothing in between. It's the echo equivalent of pixel art.
+
+The feedback echo is where it gets dangerous. Set feedback too high and the echoes build up instead of dying out. In continuous audio, this creates infinite resonance. In ternary, the values saturate at ±1 and the signal becomes a standing wave — a permanent, unchanging pattern. The room fills up and can't hold any more. Ternary feedback echoes have a *hard ceiling* that continuous echoes don't.
 
 **Use cases:**
-- **Audio effect chains** — delay, reverb foundations, spatial widening
-- **Rhythm generation** — multi-tap delays create polyrhythmic patterns from simple inputs
-- **Signal processing education** — delay lines are the simplest stateful transform
-- **Game audio** — lightweight echo effects without floating-point
-- **Generative music** — feedback echoes as evolving pattern generators
+- **Spatial audio** — give flat signals a sense of space and depth
+- **Sound design** — create rhythmic echo patterns (dub, reggae, electronic)
+- **Music production** — slapback for vocals, feedback for synths, multi-tap for atmospheres
+- **Game audio** — simulate room acoustics with ternary echoes
+- **Education** — hear the relationship between delay time and perceived distance
 
 ## See Also
 
-- **ternary-loop** — find repeating periods in echoed signals
-- **ternary-phase** — phase relationships between original and delayed signals
-- **ternary-mixer** — blend original and echo signals
-- **ternary-vu** — meter the output level of echo processing
-- **ternary-reverb** — (if you build it) multiple delay lines = reverb
+- **ternary-pan** — stereo positioning (echo + pan = spatial audio)
+- **ternary-bite** — degraded echoes for lo-fi textures
+- **ternary-needledrop** — vinyl imperfection + echo = dub techno
+- **ternary-rack** — wire echo into a modular signal chain
+- **ternary-reverb** — (future) true convolution reverb for ternary signals
 
 ## Install
 
