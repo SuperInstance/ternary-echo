@@ -205,4 +205,14 @@ mod tests {
         let out = slapback(signal, 4, 0.5);
         assert!(out.is_empty());
     }
+
+    #[test]
+    fn test_delay_read_after_write() {
+        let mut dl = DelayLine::new(3);
+        dl.tick(10, 1.0);
+        dl.tick(20, 1.0);
+        dl.tick(30, 1.0);
+        // buffer = [10, 20, 30], pos = 0
+        assert_eq!(dl.tap(1), 30);
+    }
 }
